@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["Atomically",""],["Memory","A shared or unshared wasm linear memory."],["MemoryView",""]]});
