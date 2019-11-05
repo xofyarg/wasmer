@@ -27,7 +27,7 @@ use wasmer_runtime_core::{
     vm::{Ctx, INTERNALS_SIZE},
 };
 
-fn type_to_llvm_ptr<'ctx>(intrinsics: &'ctx Intrinsics, ty: Type) -> PointerType<'ctx> {
+fn type_to_llvm_ptr<'ctx>(intrinsics: &Intrinsics<'ctx>, ty: Type) -> PointerType<'ctx> {
     match ty {
         Type::I32 => intrinsics.i32_ptr_ty,
         Type::I64 => intrinsics.i64_ptr_ty,
@@ -659,7 +659,7 @@ impl<'ctx> CtxType<'ctx> {
     pub fn memory(
         &mut self,
         index: MemoryIndex,
-        intrinsics: &'ctx Intrinsics,
+        intrinsics: &Intrinsics<'ctx>,
         module: Rc<RefCell<Module>>,
     ) -> MemoryCache {
         let (cached_memories, info, ctx_ptr_value, cache_builder) = (
@@ -780,7 +780,7 @@ impl<'ctx> CtxType<'ctx> {
     pub fn table_prepare(
         &mut self,
         index: TableIndex,
-        intrinsics: &'ctx Intrinsics,
+        intrinsics: &Intrinsics<'ctx>,
         module: Rc<RefCell<Module>>,
     ) -> (PointerValue<'ctx>, PointerValue<'ctx>) {
         let (cached_tables, info, ctx_ptr_value, cache_builder) = (
@@ -863,9 +863,9 @@ impl<'ctx> CtxType<'ctx> {
     pub fn table(
         &mut self,
         index: TableIndex,
-        intrinsics: &'ctx Intrinsics,
+        intrinsics: &Intrinsics<'ctx>,
         module: Rc<RefCell<Module>>,
-        builder: &'ctx Builder,
+        builder: &Builder<'ctx>,
     ) -> (PointerValue<'ctx>, IntValue<'ctx>) {
         let (ptr_to_base_ptr, ptr_to_bounds) =
             self.table_prepare(index, intrinsics, module.clone());
@@ -894,9 +894,9 @@ impl<'ctx> CtxType<'ctx> {
         &mut self,
         index: LocalFuncIndex,
         fn_ty: FunctionType<'ctx>,
-        intrinsics: &'ctx Intrinsics,
+        intrinsics: &Intrinsics<'ctx>,
         module: Rc<RefCell<Module>>,
-        builder: &'ctx Builder,
+        builder: &Builder<'ctx>,
     ) -> PointerValue<'ctx> {
         let local_func_array_ptr_ptr = unsafe {
             builder.build_struct_gep(
@@ -942,7 +942,7 @@ impl<'ctx> CtxType<'ctx> {
     pub fn dynamic_sigindex(
         &mut self,
         index: SigIndex,
-        intrinsics: &'ctx Intrinsics,
+        intrinsics: &Intrinsics<'ctx>,
     ) -> IntValue<'ctx> {
         let (cached_sigindices, ctx_ptr_value, cache_builder) = (
             &mut self.cached_sigindices,
@@ -980,9 +980,9 @@ impl<'ctx> CtxType<'ctx> {
     pub fn global_cache(
         &mut self,
         index: GlobalIndex,
-        intrinsics: &'ctx Intrinsics,
+        intrinsics: &'ctx Intrinsics<'ctx>,
         module: Rc<RefCell<Module>>,
-    ) -> GlobalCache {
+    ) -> GlobalCache<'ctx> {
         let (cached_globals, ctx_ptr_value, info, cache_builder) = (
             &mut self.cached_globals,
             self.ctx_ptr_value,
@@ -1082,7 +1082,7 @@ impl<'ctx> CtxType<'ctx> {
     pub fn imported_func(
         &mut self,
         index: ImportedFuncIndex,
-        intrinsics: &'ctx Intrinsics,
+        intrinsics: &Intrinsics<'ctx>,
         module: Rc<RefCell<Module>>,
     ) -> (PointerValue<'ctx>, PointerValue<'ctx>) {
         let (cached_imported_functions, ctx_ptr_value, cache_builder) = (
@@ -1154,9 +1154,9 @@ impl<'ctx> CtxType<'ctx> {
     pub fn internal_field(
         &mut self,
         index: usize,
-        intrinsics: &'ctx Intrinsics,
+        intrinsics: &Intrinsics<'ctx>,
         module: Rc<RefCell<Module>>,
-        builder: &'ctx Builder,
+        builder: &Builder<'ctx>,
     ) -> PointerValue<'ctx> {
         assert!(index < INTERNALS_SIZE);
 
@@ -1191,9 +1191,9 @@ impl<'ctx> CtxType<'ctx> {
 // other memory accesses which have a different (label, index) pair.
 pub fn tbaa_label<'ctx>(
     module: Rc<RefCell<Module>>,
-    intrinsics: &'ctx Intrinsics,
+    intrinsics: &Intrinsics<'ctx>,
     label: &str,
-    instruction: InstructionValue,
+    instruction: InstructionValue<'ctx>,
     index: Option<u32>,
 ) {
     // To convey to LLVM that two pointers must be pointing to distinct memory,

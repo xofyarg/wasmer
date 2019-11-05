@@ -18,8 +18,8 @@ pub fn generate_trampolines<'ctx>(
     signatures: &SliceMap<SigIndex, FunctionType<'ctx>>,
     module: &Module<'ctx>,
     context: &'ctx Context,
-    builder: &'ctx Builder,
-    intrinsics: &'ctx Intrinsics,
+    builder: &Builder<'ctx>,
+    intrinsics: &Intrinsics<'ctx>,
 ) -> Result<(), String> {
     for (sig_index, sig) in info.signatures.iter() {
         let func_type = signatures[sig_index];
@@ -47,12 +47,12 @@ pub fn generate_trampolines<'ctx>(
     Ok(())
 }
 
-fn generate_trampoline(
+fn generate_trampoline<'ctx>(
     trampoline_func: FunctionValue,
     func_sig: &FuncSig,
-    context: &Context,
-    builder: &Builder,
-    intrinsics: &Intrinsics,
+    context: &'ctx Context,
+    builder: &Builder<'ctx>,
+    intrinsics: &Intrinsics<'ctx>,
 ) -> Result<(), String> {
     let entry_block = context.append_basic_block(trampoline_func, "entry");
     builder.position_at_end(&entry_block);
