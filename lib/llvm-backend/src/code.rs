@@ -20,6 +20,7 @@ use inkwell::{
     AddressSpace, AtomicOrdering, AtomicRMWBinOp, FloatPredicate, IntPredicate, OptimizationLevel,
 };
 use smallvec::SmallVec;
+use std::marker::PhantomData;
 use std::{
     cell::RefCell,
     rc::Rc,
@@ -38,12 +39,12 @@ use wasmer_runtime_core::{
 };
 use wasmparser::{BinaryReaderError, MemoryImmediate, Operator, Type as WpType};
 
-fn func_sig_to_llvm(
-    context: &Context,
+fn func_sig_to_llvm<'ctx>(
+    context: &'ctx Context,
     intrinsics: &Intrinsics,
     sig: &FuncSig,
-    type_to_llvm: fn(intrinsics: &Intrinsics, ty: Type) -> BasicTypeEnum,
-) -> FunctionType {
+    type_to_llvm: fn(intrinsics: &Intrinsics, ty: Type) -> BasicTypeEnum<'ctx>,
+) -> FunctionType<'ctx> {
     let user_param_types = sig.params().iter().map(|&ty| type_to_llvm(intrinsics, ty));
 
     let param_types: Vec<_> = std::iter::once(intrinsics.ctx_ptr_ty.as_basic_type_enum())
@@ -66,7 +67,7 @@ fn func_sig_to_llvm(
     }
 }
 
-fn type_to_llvm(intrinsics: &Intrinsics, ty: Type) -> BasicTypeEnum {
+fn type_to_llvm<'ctx>(intrinsics: &'ctx Intrinsics, ty: Type) -> BasicTypeEnum<'ctx> {
     match ty {
         Type::I32 => intrinsics.i32_ty.as_basic_type_enum(),
         Type::I64 => intrinsics.i64_ty.as_basic_type_enum(),
@@ -76,7 +77,7 @@ fn type_to_llvm(intrinsics: &Intrinsics, ty: Type) -> BasicTypeEnum {
     }
 }
 
-fn type_to_llvm_int_only(intrinsics: &Intrinsics, ty: Type) -> BasicTypeEnum {
+fn type_to_llvm_int_only<'ctx>(intrinsics: &'ctx Intrinsics, ty: Type) -> BasicTypeEnum<'ctx> {
     match ty {
         Type::I32 | Type::F32 => intrinsics.i32_ty.as_basic_type_enum(),
         Type::I64 | Type::F64 => intrinsics.i64_ty.as_basic_type_enum(),
@@ -85,13 +86,13 @@ fn type_to_llvm_int_only(intrinsics: &Intrinsics, ty: Type) -> BasicTypeEnum {
 }
 
 // Create a vector where each lane contains the same value.
-fn splat_vector(
-    builder: &Builder,
-    intrinsics: &Intrinsics,
+fn splat_vector<'ctx>(
+    builder: &'ctx Builder,
+    intrinsics: &'ctx Intrinsics,
     value: BasicValueEnum,
     vec_ty: VectorType,
     name: &str,
-) -> VectorValue {
+) -> VectorValue<'ctx> {
     // Use insert_element to insert the element into an undef vector, then use
     // shuffle vector to copy that lane to all lanes.
     builder.build_shuffle_vector(
@@ -105,18 +106,18 @@ fn splat_vector(
 // Convert floating point vector to integer and saturate when out of range.
 // TODO: generalize to non-vectors using FloatMathType, IntMathType, etc. for
 // https://github.com/WebAssembly/nontrapping-float-to-int-conversions/blob/master/proposals/nontrapping-float-to-int-conversion/Overview.md
-fn trunc_sat(
+fn trunc_sat<'ctx>(
     builder: &Builder,
     intrinsics: &Intrinsics,
-    fvec_ty: VectorType,
-    ivec_ty: VectorType,
+    fvec_ty: VectorType<'ctx>,
+    ivec_ty: VectorType<'ctx>,
     lower_bound: u64, // Exclusive (lowest representable value)
     upper_bound: u64, // Exclusive (greatest representable value)
     int_min_value: u64,
     int_max_value: u64,
-    value: IntValue,
+    value: IntValue<'ctx>,
     name: &str,
-) -> IntValue {
+) -> IntValue<'ctx> {
     // a) Compare vector with itself to identify NaN lanes.
     // b) Compare vector with splat of inttofp(upper_bound) to identify
     //    lanes that need to saturate to max.
@@ -380,13 +381,13 @@ fn trap_if_zero(
     builder.position_at_end(&shouldnt_trap_block);
 }
 
-fn v128_into_int_vec(
+fn v128_into_int_vec<'ctx>(
     builder: &Builder,
     intrinsics: &Intrinsics,
-    value: BasicValueEnum,
+    value: BasicValueEnum<'ctx>,
     info: ExtraInfo,
-    int_vec_ty: VectorType,
-) -> VectorValue {
+    int_vec_ty: VectorType<'ctx>,
+) -> VectorValue<'ctx> {
     let value = match info {
         ExtraInfo::None => value,
         ExtraInfo::PendingF32NaN => {
@@ -403,50 +404,50 @@ fn v128_into_int_vec(
         .into_vector_value()
 }
 
-fn v128_into_i8x16(
+fn v128_into_i8x16<'ctx>(
     builder: &Builder,
     intrinsics: &Intrinsics,
     value: BasicValueEnum,
     info: ExtraInfo,
-) -> VectorValue {
+) -> VectorValue<'ctx> {
     v128_into_int_vec(builder, intrinsics, value, info, intrinsics.i8x16_ty)
 }
 
-fn v128_into_i16x8(
+fn v128_into_i16x8<'ctx>(
     builder: &Builder,
     intrinsics: &Intrinsics,
     value: BasicValueEnum,
     info: ExtraInfo,
-) -> VectorValue {
+) -> VectorValue<'ctx> {
     v128_into_int_vec(builder, intrinsics, value, info, intrinsics.i16x8_ty)
 }
 
-fn v128_into_i32x4(
+fn v128_into_i32x4<'ctx>(
     builder: &Builder,
     intrinsics: &Intrinsics,
     value: BasicValueEnum,
     info: ExtraInfo,
-) -> VectorValue {
+) -> VectorValue<'ctx> {
     v128_into_int_vec(builder, intrinsics, value, info, intrinsics.i32x4_ty)
 }
 
-fn v128_into_i64x2(
+fn v128_into_i64x2<'ctx>(
     builder: &Builder,
     intrinsics: &Intrinsics,
     value: BasicValueEnum,
     info: ExtraInfo,
-) -> VectorValue {
+) -> VectorValue<'ctx> {
     v128_into_int_vec(builder, intrinsics, value, info, intrinsics.i64x2_ty)
 }
 
 // If the value is pending a 64-bit canonicalization, do it now.
 // Return a f32x4 vector.
-fn v128_into_f32x4(
+fn v128_into_f32x4<'ctx>(
     builder: &Builder,
     intrinsics: &Intrinsics,
     value: BasicValueEnum,
     info: ExtraInfo,
-) -> VectorValue {
+) -> VectorValue<'ctx> {
     let value = if info == ExtraInfo::PendingF64NaN {
         let value = builder.build_bitcast(value, intrinsics.f64x2_ty, "");
         canonicalize_nans(builder, intrinsics, value)
@@ -460,12 +461,12 @@ fn v128_into_f32x4(
 
 // If the value is pending a 32-bit canonicalization, do it now.
 // Return a f64x2 vector.
-fn v128_into_f64x2(
+fn v128_into_f64x2<'ctx>(
     builder: &Builder,
     intrinsics: &Intrinsics,
     value: BasicValueEnum,
     info: ExtraInfo,
-) -> VectorValue {
+) -> VectorValue<'ctx> {
     let value = if info == ExtraInfo::PendingF32NaN {
         let value = builder.build_bitcast(value, intrinsics.f32x4_ty, "");
         canonicalize_nans(builder, intrinsics, value)
@@ -477,12 +478,12 @@ fn v128_into_f64x2(
         .into_vector_value()
 }
 
-fn apply_pending_canonicalization(
+fn apply_pending_canonicalization<'ctx>(
     builder: &Builder,
     intrinsics: &Intrinsics,
     value: BasicValueEnum,
     info: ExtraInfo,
-) -> BasicValueEnum {
+) -> BasicValueEnum<'ctx> {
     match info {
         ExtraInfo::None => value,
         ExtraInfo::PendingF32NaN => {
@@ -513,11 +514,11 @@ fn apply_pending_canonicalization(
 }
 
 // Replaces any NaN with the canonical QNaN, otherwise leaves the value alone.
-fn canonicalize_nans(
+fn canonicalize_nans<'ctx>(
     builder: &Builder,
     intrinsics: &Intrinsics,
     value: BasicValueEnum,
-) -> BasicValueEnum {
+) -> BasicValueEnum<'ctx> {
     let f_ty = value.get_type();
     let canonicalized = if f_ty.is_vector_type() {
         let value = value.into_vector_value();
@@ -551,10 +552,10 @@ fn canonicalize_nans(
     canonicalized
 }
 
-fn resolve_memory_ptr(
+fn resolve_memory_ptr<'ctx>(
     builder: &Builder,
     intrinsics: &Intrinsics,
-    context: &Context,
+    context: &'ctx Context,
     module: Rc<RefCell<Module>>,
     function: &FunctionValue,
     state: &mut State,
@@ -562,7 +563,7 @@ fn resolve_memory_ptr(
     memarg: &MemoryImmediate,
     ptr_ty: PointerType,
     value_size: usize,
-) -> Result<PointerValue, BinaryReaderError> {
+) -> Result<PointerValue<'ctx>, BinaryReaderError> {
     // Look up the memory base (as pointer) and bounds (as unsigned integer).
     let memory_cache = ctx.memory(MemoryIndex::new(0), intrinsics, module.clone());
     let (mem_base, mem_bound, minimum, _maximum) = match memory_cache {
@@ -843,43 +844,47 @@ pub unsafe extern "C" fn callback_trampoline(
     }
 }
 
-pub struct LLVMModuleCodeGenerator {
+pub struct LLVMModuleCodeGenerator<'ctx> {
     context: Option<Context>,
-    builder: Option<Builder>,
-    intrinsics: Option<Intrinsics>,
-    functions: Vec<LLVMFunctionCodeGenerator>,
-    signatures: Map<SigIndex, FunctionType>,
+    _phantom: PhantomData<&'ctx ()>,
+
+    builder: Option<Builder<'ctx>>,
+    intrinsics: Option<Intrinsics<'ctx>>,
+    functions: Vec<LLVMFunctionCodeGenerator<'ctx>>,
+    signatures: Map<SigIndex, FunctionType<'ctx>>,
     signatures_raw: Map<SigIndex, FuncSig>,
     function_signatures: Option<Arc<Map<FuncIndex, SigIndex>>>,
     func_import_count: usize,
-    personality_func: FunctionValue,
-    module: Rc<RefCell<Module>>,
+    personality_func: FunctionValue<'ctx>,
+    module: Rc<RefCell<Module<'ctx>>>,
     stackmaps: Rc<RefCell<StackmapRegistry>>,
     track_state: bool,
     target_machine: TargetMachine,
 }
 
-pub struct LLVMFunctionCodeGenerator {
+pub struct LLVMFunctionCodeGenerator<'ctx> {
     context: Option<Context>,
-    builder: Option<Builder>,
-    alloca_builder: Option<Builder>,
-    intrinsics: Option<Intrinsics>,
-    state: State,
-    function: FunctionValue,
+    _phantom: PhantomData<&'ctx ()>,
+
+    builder: Option<Builder<'ctx>>,
+    alloca_builder: Option<Builder<'ctx>>,
+    intrinsics: Option<Intrinsics<'ctx>>,
+    state: State<'ctx>,
+    function: FunctionValue<'ctx>,
     func_sig: FuncSig,
-    signatures: Map<SigIndex, FunctionType>,
-    locals: Vec<PointerValue>, // Contains params and locals
+    signatures: Map<SigIndex, FunctionType<'ctx>>,
+    locals: Vec<PointerValue<'ctx>>, // Contains params and locals
     num_params: usize,
-    ctx: Option<CtxType<'static>>,
+    ctx: Option<CtxType<'ctx>>,
     unreachable_depth: usize,
     stackmaps: Rc<RefCell<StackmapRegistry>>,
     index: usize,
     opcode_offset: usize,
     track_state: bool,
-    module: Rc<RefCell<Module>>,
+    module: Rc<RefCell<Module<'ctx>>>,
 }
 
-impl FunctionCodeGenerator<CodegenError> for LLVMFunctionCodeGenerator {
+impl<'ctx> FunctionCodeGenerator<CodegenError> for LLVMFunctionCodeGenerator<'ctx> {
     fn feed_return(&mut self, _ty: WpType) -> Result<(), CodegenError> {
         Ok(())
     }
@@ -7969,10 +7974,10 @@ impl From<BinaryReaderError> for CodegenError {
     }
 }
 
-impl ModuleCodeGenerator<LLVMFunctionCodeGenerator, LLVMBackend, CodegenError>
-    for LLVMModuleCodeGenerator
+impl<'ctx> ModuleCodeGenerator<LLVMFunctionCodeGenerator<'ctx>, LLVMBackend, CodegenError>
+    for LLVMModuleCodeGenerator<'ctx>
 {
-    fn new() -> LLVMModuleCodeGenerator {
+    fn new() -> LLVMModuleCodeGenerator<'ctx> {
         let context = Context::create();
         let module = context.create_module("module");
 

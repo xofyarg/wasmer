@@ -14,8 +14,8 @@ libc = "0.2.60"
 byteorder = "1"
 
 [dependencies.inkwell]
-git = "https://github.com/wasmerio/inkwell"
-branch = "llvm8-0"
+git = "https://github.com/TheDan64/inkwell"
+branch = "feature/context_lifetime"
 default-features = false
 features = ["llvm8-0", "target-x86"]
 

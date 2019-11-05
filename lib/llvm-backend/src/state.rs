@@ -7,23 +7,23 @@ use std::cell::Cell;
 use wasmparser::BinaryReaderError;
 
 #[derive(Debug)]
-pub enum ControlFrame {
+pub enum ControlFrame<'ctx> {
     Block {
         next: BasicBlock,
-        phis: SmallVec<[PhiValue; 1]>,
+        phis: SmallVec<[PhiValue<'ctx>; 1]>,
         stack_size_snapshot: usize,
     },
     Loop {
         body: BasicBlock,
         next: BasicBlock,
-        phis: SmallVec<[PhiValue; 1]>,
+        phis: SmallVec<[PhiValue<'ctx>; 1]>,
         stack_size_snapshot: usize,
     },
     IfElse {
         if_then: BasicBlock,
         if_else: BasicBlock,
         next: BasicBlock,
-        phis: SmallVec<[PhiValue; 1]>,
+        phis: SmallVec<[PhiValue<'ctx>; 1]>,
         stack_size_snapshot: usize,
         if_else_state: IfElseState,
     },
@@ -35,7 +35,7 @@ pub enum IfElseState {
     Else,
 }
 
-impl ControlFrame {
+impl<'ctx> ControlFrame<'ctx> {
     pub fn code_after(&self) -> &BasicBlock {
         match self {
             ControlFrame::Block { ref next, .. }
@@ -88,15 +88,15 @@ impl Default for ExtraInfo {
 }
 
 #[derive(Debug)]
-pub struct State {
-    pub stack: Vec<(BasicValueEnum, ExtraInfo)>,
-    control_stack: Vec<ControlFrame>,
+pub struct State<'ctx> {
+    pub stack: Vec<(BasicValueEnum<'ctx>, ExtraInfo)>,
+    control_stack: Vec<ControlFrame<'ctx>>,
     value_counter: Cell<usize>,
 
     pub reachable: bool,
 }
 
-impl State {
+impl<'ctx> State<'ctx> {
     pub fn new() -> Self {
         Self {
             stack: vec![],
@@ -164,19 +164,19 @@ impl State {
         s
     }
 
-    pub fn push1<T: BasicValue>(&mut self, value: T) {
+    pub fn push1<T: BasicValue<'ctx>>(&mut self, value: T) {
         self.push1_extra(value, ExtraInfo::None);
     }
 
-    pub fn push1_extra<T: BasicValue>(&mut self, value: T, info: ExtraInfo) {
+    pub fn push1_extra<T: BasicValue<'ctx>>(&mut self, value: T, info: ExtraInfo) {
         self.stack.push((value.as_basic_value_enum(), info));
     }
 
-    pub fn pop1(&mut self) -> Result<BasicValueEnum, BinaryReaderError> {
+    pub fn pop1(&mut self) -> Result<BasicValueEnum<'ctx>, BinaryReaderError> {
         Ok(self.pop1_extra()?.0)
     }
 
-    pub fn pop1_extra(&mut self) -> Result<(BasicValueEnum, ExtraInfo), BinaryReaderError> {
+    pub fn pop1_extra(&mut self) -> Result<(BasicValueEnum<'ctx>, ExtraInfo), BinaryReaderError> {
         self.stack.pop().ok_or(BinaryReaderError {
             message: "invalid value stack",
             offset: -1isize as usize,

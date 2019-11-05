@@ -28,7 +28,7 @@ use wasmer_runtime_core::{
     vm::{Ctx, INTERNALS_SIZE},
 };
 
-fn type_to_llvm_ptr(intrinsics: &Intrinsics, ty: Type) -> PointerType {
+fn type_to_llvm_ptr<'ctx>(intrinsics: &Intrinsics<'ctx>, ty: Type) -> PointerType<'ctx> {
     match ty {
         Type::I32 => intrinsics.i32_ptr_ty,
         Type::I64 => intrinsics.i64_ptr_ty,
@@ -38,123 +38,123 @@ fn type_to_llvm_ptr(intrinsics: &Intrinsics, ty: Type) -> PointerType {
     }
 }
 
-pub struct Intrinsics {
-    pub ctlz_i32: FunctionValue,
-    pub ctlz_i64: FunctionValue,
+pub struct Intrinsics<'ctx> {
+    pub ctlz_i32: FunctionValue<'ctx>,
+    pub ctlz_i64: FunctionValue<'ctx>,
 
-    pub cttz_i32: FunctionValue,
-    pub cttz_i64: FunctionValue,
+    pub cttz_i32: FunctionValue<'ctx>,
+    pub cttz_i64: FunctionValue<'ctx>,
 
-    pub ctpop_i32: FunctionValue,
-    pub ctpop_i64: FunctionValue,
+    pub ctpop_i32: FunctionValue<'ctx>,
+    pub ctpop_i64: FunctionValue<'ctx>,
 
-    pub sqrt_f32: FunctionValue,
-    pub sqrt_f64: FunctionValue,
-    pub sqrt_f32x4: FunctionValue,
-    pub sqrt_f64x2: FunctionValue,
+    pub sqrt_f32: FunctionValue<'ctx>,
+    pub sqrt_f64: FunctionValue<'ctx>,
+    pub sqrt_f32x4: FunctionValue<'ctx>,
+    pub sqrt_f64x2: FunctionValue<'ctx>,
 
-    pub ceil_f32: FunctionValue,
-    pub ceil_f64: FunctionValue,
+    pub ceil_f32: FunctionValue<'ctx>,
+    pub ceil_f64: FunctionValue<'ctx>,
 
-    pub floor_f32: FunctionValue,
-    pub floor_f64: FunctionValue,
+    pub floor_f32: FunctionValue<'ctx>,
+    pub floor_f64: FunctionValue<'ctx>,
 
-    pub trunc_f32: FunctionValue,
-    pub trunc_f64: FunctionValue,
+    pub trunc_f32: FunctionValue<'ctx>,
+    pub trunc_f64: FunctionValue<'ctx>,
 
-    pub nearbyint_f32: FunctionValue,
-    pub nearbyint_f64: FunctionValue,
+    pub nearbyint_f32: FunctionValue<'ctx>,
+    pub nearbyint_f64: FunctionValue<'ctx>,
 
-    pub fabs_f32: FunctionValue,
-    pub fabs_f64: FunctionValue,
-    pub fabs_f32x4: FunctionValue,
-    pub fabs_f64x2: FunctionValue,
+    pub fabs_f32: FunctionValue<'ctx>,
+    pub fabs_f64: FunctionValue<'ctx>,
+    pub fabs_f32x4: FunctionValue<'ctx>,
+    pub fabs_f64x2: FunctionValue<'ctx>,
 
-    pub copysign_f32: FunctionValue,
-    pub copysign_f64: FunctionValue,
+    pub copysign_f32: FunctionValue<'ctx>,
+    pub copysign_f64: FunctionValue<'ctx>,
 
-    pub sadd_sat_i8x16: FunctionValue,
-    pub sadd_sat_i16x8: FunctionValue,
-    pub uadd_sat_i8x16: FunctionValue,
-    pub uadd_sat_i16x8: FunctionValue,
+    pub sadd_sat_i8x16: FunctionValue<'ctx>,
+    pub sadd_sat_i16x8: FunctionValue<'ctx>,
+    pub uadd_sat_i8x16: FunctionValue<'ctx>,
+    pub uadd_sat_i16x8: FunctionValue<'ctx>,
 
-    pub ssub_sat_i8x16: FunctionValue,
-    pub ssub_sat_i16x8: FunctionValue,
-    pub usub_sat_i8x16: FunctionValue,
-    pub usub_sat_i16x8: FunctionValue,
+    pub ssub_sat_i8x16: FunctionValue<'ctx>,
+    pub ssub_sat_i16x8: FunctionValue<'ctx>,
+    pub usub_sat_i8x16: FunctionValue<'ctx>,
+    pub usub_sat_i16x8: FunctionValue<'ctx>,
 
-    pub expect_i1: FunctionValue,
-    pub trap: FunctionValue,
+    pub expect_i1: FunctionValue<'ctx>,
+    pub trap: FunctionValue<'ctx>,
 
-    pub void_ty: VoidType,
-    pub i1_ty: IntType,
-    pub i8_ty: IntType,
-    pub i16_ty: IntType,
-    pub i32_ty: IntType,
-    pub i64_ty: IntType,
-    pub i128_ty: IntType,
-    pub f32_ty: FloatType,
-    pub f64_ty: FloatType,
+    pub void_ty: VoidType<'ctx>,
+    pub i1_ty: IntType<'ctx>,
+    pub i8_ty: IntType<'ctx>,
+    pub i16_ty: IntType<'ctx>,
+    pub i32_ty: IntType<'ctx>,
+    pub i64_ty: IntType<'ctx>,
+    pub i128_ty: IntType<'ctx>,
+    pub f32_ty: FloatType<'ctx>,
+    pub f64_ty: FloatType<'ctx>,
 
-    pub i1x128_ty: VectorType,
-    pub i8x16_ty: VectorType,
-    pub i16x8_ty: VectorType,
-    pub i32x4_ty: VectorType,
-    pub i64x2_ty: VectorType,
-    pub f32x4_ty: VectorType,
-    pub f64x2_ty: VectorType,
+    pub i1x128_ty: VectorType<'ctx>,
+    pub i8x16_ty: VectorType<'ctx>,
+    pub i16x8_ty: VectorType<'ctx>,
+    pub i32x4_ty: VectorType<'ctx>,
+    pub i64x2_ty: VectorType<'ctx>,
+    pub f32x4_ty: VectorType<'ctx>,
+    pub f64x2_ty: VectorType<'ctx>,
 
-    pub i8_ptr_ty: PointerType,
-    pub i16_ptr_ty: PointerType,
-    pub i32_ptr_ty: PointerType,
-    pub i64_ptr_ty: PointerType,
-    pub i128_ptr_ty: PointerType,
-    pub f32_ptr_ty: PointerType,
-    pub f64_ptr_ty: PointerType,
+    pub i8_ptr_ty: PointerType<'ctx>,
+    pub i16_ptr_ty: PointerType<'ctx>,
+    pub i32_ptr_ty: PointerType<'ctx>,
+    pub i64_ptr_ty: PointerType<'ctx>,
+    pub i128_ptr_ty: PointerType<'ctx>,
+    pub f32_ptr_ty: PointerType<'ctx>,
+    pub f64_ptr_ty: PointerType<'ctx>,
 
-    pub anyfunc_ty: StructType,
+    pub anyfunc_ty: StructType<'ctx>,
 
-    pub i1_zero: IntValue,
-    pub i8_zero: IntValue,
-    pub i32_zero: IntValue,
-    pub i64_zero: IntValue,
-    pub i128_zero: IntValue,
-    pub f32_zero: FloatValue,
-    pub f64_zero: FloatValue,
-    pub f32x4_zero: VectorValue,
-    pub f64x2_zero: VectorValue,
+    pub i1_zero: IntValue<'ctx>,
+    pub i8_zero: IntValue<'ctx>,
+    pub i32_zero: IntValue<'ctx>,
+    pub i64_zero: IntValue<'ctx>,
+    pub i128_zero: IntValue<'ctx>,
+    pub f32_zero: FloatValue<'ctx>,
+    pub f64_zero: FloatValue<'ctx>,
+    pub f32x4_zero: VectorValue<'ctx>,
+    pub f64x2_zero: VectorValue<'ctx>,
 
-    pub trap_unreachable: BasicValueEnum,
-    pub trap_call_indirect_sig: BasicValueEnum,
-    pub trap_call_indirect_oob: BasicValueEnum,
-    pub trap_memory_oob: BasicValueEnum,
-    pub trap_illegal_arithmetic: BasicValueEnum,
-    pub trap_misaligned_atomic: BasicValueEnum,
+    pub trap_unreachable: BasicValueEnum<'ctx>,
+    pub trap_call_indirect_sig: BasicValueEnum<'ctx>,
+    pub trap_call_indirect_oob: BasicValueEnum<'ctx>,
+    pub trap_memory_oob: BasicValueEnum<'ctx>,
+    pub trap_illegal_arithmetic: BasicValueEnum<'ctx>,
+    pub trap_misaligned_atomic: BasicValueEnum<'ctx>,
 
     // VM intrinsics.
-    pub memory_grow_dynamic_local: FunctionValue,
-    pub memory_grow_static_local: FunctionValue,
-    pub memory_grow_shared_local: FunctionValue,
-    pub memory_grow_dynamic_import: FunctionValue,
-    pub memory_grow_static_import: FunctionValue,
-    pub memory_grow_shared_import: FunctionValue,
+    pub memory_grow_dynamic_local: FunctionValue<'ctx>,
+    pub memory_grow_static_local: FunctionValue<'ctx>,
+    pub memory_grow_shared_local: FunctionValue<'ctx>,
+    pub memory_grow_dynamic_import: FunctionValue<'ctx>,
+    pub memory_grow_static_import: FunctionValue<'ctx>,
+    pub memory_grow_shared_import: FunctionValue<'ctx>,
 
-    pub memory_size_dynamic_local: FunctionValue,
-    pub memory_size_static_local: FunctionValue,
-    pub memory_size_shared_local: FunctionValue,
-    pub memory_size_dynamic_import: FunctionValue,
-    pub memory_size_static_import: FunctionValue,
-    pub memory_size_shared_import: FunctionValue,
+    pub memory_size_dynamic_local: FunctionValue<'ctx>,
+    pub memory_size_static_local: FunctionValue<'ctx>,
+    pub memory_size_shared_local: FunctionValue<'ctx>,
+    pub memory_size_dynamic_import: FunctionValue<'ctx>,
+    pub memory_size_static_import: FunctionValue<'ctx>,
+    pub memory_size_shared_import: FunctionValue<'ctx>,
 
-    pub throw_trap: FunctionValue,
-    pub throw_breakpoint: FunctionValue,
+    pub throw_trap: FunctionValue<'ctx>,
+    pub throw_breakpoint: FunctionValue<'ctx>,
 
-    pub experimental_stackmap: FunctionValue,
+    pub experimental_stackmap: FunctionValue<'ctx>,
 
-    pub ctx_ptr_ty: PointerType,
+    pub ctx_ptr_ty: PointerType<'ctx>,
 }
 
-impl Intrinsics {
+impl Intrinsics<'_> {
     pub fn declare(module: &Module, context: &Context) -> Self {
         let void_ty = context.void_type();
         let i1_ty = context.bool_type();
@@ -558,66 +558,65 @@ impl Intrinsics {
 }
 
 #[derive(Clone, Copy)]
-pub enum MemoryCache {
+pub enum MemoryCache<'ctx> {
     /// The memory moves around.
     Dynamic {
-        ptr_to_base_ptr: PointerValue,
-        ptr_to_bounds: PointerValue,
+        ptr_to_base_ptr: PointerValue<'ctx>,
+        ptr_to_bounds: PointerValue<'ctx>,
         minimum: Pages,
         maximum: Option<Pages>,
     },
     /// The memory is always in the same place.
     Static {
-        base_ptr: PointerValue,
-        bounds: IntValue,
+        base_ptr: PointerValue<'ctx>,
+        bounds: IntValue<'ctx>,
         minimum: Pages,
         maximum: Option<Pages>,
     },
 }
 
-struct TableCache {
-    ptr_to_base_ptr: PointerValue,
-    ptr_to_bounds: PointerValue,
+struct TableCache<'ctx> {
+    ptr_to_base_ptr: PointerValue<'ctx>,
+    ptr_to_bounds: PointerValue<'ctx>,
 }
 
 #[derive(Clone, Copy)]
-pub enum GlobalCache {
-    Mut { ptr_to_value: PointerValue },
-    Const { value: BasicValueEnum },
+pub enum GlobalCache<'ctx> {
+    Mut { ptr_to_value: PointerValue<'ctx> },
+    Const { value: BasicValueEnum<'ctx> },
 }
 
-struct ImportedFuncCache {
-    func_ptr: PointerValue,
-    ctx_ptr: PointerValue,
+struct ImportedFuncCache<'ctx> {
+    func_ptr: PointerValue<'ctx>,
+    ctx_ptr: PointerValue<'ctx>,
 }
 
-pub struct CtxType<'a> {
-    ctx_ptr_value: PointerValue,
+pub struct CtxType<'ctx> {
+    ctx_ptr_value: PointerValue<'ctx>,
 
-    info: &'a ModuleInfo,
-    cache_builder: Builder,
+    info: &'ctx ModuleInfo,
+    cache_builder: Builder<'ctx>,
 
-    cached_signal_mem: Option<PointerValue>,
+    cached_signal_mem: Option<PointerValue<'ctx>>,
 
-    cached_memories: HashMap<MemoryIndex, MemoryCache>,
-    cached_tables: HashMap<TableIndex, TableCache>,
-    cached_sigindices: HashMap<SigIndex, IntValue>,
-    cached_globals: HashMap<GlobalIndex, GlobalCache>,
-    cached_imported_functions: HashMap<ImportedFuncIndex, ImportedFuncCache>,
-
-    _phantom: PhantomData<&'a FunctionValue>,
+    cached_memories: HashMap<MemoryIndex, MemoryCache<'ctx>>,
+    cached_tables: HashMap<TableIndex, TableCache<'ctx>>,
+    cached_sigindices: HashMap<SigIndex, IntValue<'ctx>>,
+    cached_globals: HashMap<GlobalIndex, GlobalCache<'ctx>>,
+    cached_imported_functions: HashMap<ImportedFuncIndex, ImportedFuncCache<'ctx>>,
+    //    _phantom: PhantomData<&'a FunctionValue<'ctx>>,
 }
 
 fn offset_to_index(offset: u8) -> u32 {
     (offset as usize / ::std::mem::size_of::<usize>()) as u32
 }
 
-impl<'a> CtxType<'a> {
+impl<'ctx> CtxType<'ctx> {
     pub fn new(
-        info: &'a ModuleInfo,
-        func_value: &'a FunctionValue,
-        cache_builder: Builder,
-    ) -> CtxType<'a> {
+        info: &'ctx ModuleInfo,
+        func_value: &'ctx FunctionValue,
+        cache_builder: Builder<'ctx>,
+    ) -> CtxType<'ctx> {
         CtxType {
             ctx_ptr_value: func_value.get_nth_param(0).unwrap().into_pointer_value(),
 
