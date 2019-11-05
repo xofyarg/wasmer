@@ -51,7 +51,7 @@ impl<'ctx> ControlFrame<'ctx> {
         }
     }
 
-    pub fn phis(&self) -> &[PhiValue] {
+    pub fn phis(&self) -> &[PhiValue<'ctx>] {
         match self {
             ControlFrame::Block { ref phis, .. }
             | ControlFrame::Loop { ref phis, .. }
@@ -106,7 +106,7 @@ impl<'ctx> State<'ctx> {
         }
     }
 
-    pub fn reset_stack(&mut self, frame: &ControlFrame) {
+    pub fn reset_stack(&mut self, frame: &'ctx ControlFrame) {
         let stack_size_snapshot = match frame {
             ControlFrame::Block {
                 stack_size_snapshot,
@@ -124,14 +124,14 @@ impl<'ctx> State<'ctx> {
         self.stack.truncate(stack_size_snapshot);
     }
 
-    pub fn outermost_frame(&self) -> Result<&ControlFrame, BinaryReaderError> {
+    pub fn outermost_frame(&self) -> Result<&'ctx ControlFrame, BinaryReaderError> {
         self.control_stack.get(0).ok_or(BinaryReaderError {
             message: "invalid control stack depth",
             offset: -1isize as usize,
         })
     }
 
-    pub fn frame_at_depth(&self, depth: u32) -> Result<&ControlFrame, BinaryReaderError> {
+    pub fn frame_at_depth(&self, depth: u32) -> Result<&'ctx ControlFrame, BinaryReaderError> {
         let index = self.control_stack.len() - 1 - (depth as usize);
         self.control_stack.get(index).ok_or(BinaryReaderError {
             message: "invalid control stack depth",
@@ -142,7 +142,7 @@ impl<'ctx> State<'ctx> {
     pub fn frame_at_depth_mut(
         &mut self,
         depth: u32,
-    ) -> Result<&mut ControlFrame, BinaryReaderError> {
+    ) -> Result<&'ctx mut ControlFrame, BinaryReaderError> {
         let index = self.control_stack.len() - 1 - (depth as usize);
         self.control_stack.get_mut(index).ok_or(BinaryReaderError {
             message: "invalid control stack depth",
@@ -150,7 +150,7 @@ impl<'ctx> State<'ctx> {
         })
     }
 
-    pub fn pop_frame(&mut self) -> Result<ControlFrame, BinaryReaderError> {
+    pub fn pop_frame(&mut self) -> Result<ControlFrame<'ctx>, BinaryReaderError> {
         self.control_stack.pop().ok_or(BinaryReaderError {
             message: "cannot pop from control stack",
             offset: -1isize as usize,
@@ -270,7 +270,7 @@ impl<'ctx> State<'ctx> {
         Ok(())
     }
 
-    pub fn push_block(&mut self, next: BasicBlock, phis: SmallVec<[PhiValue; 1]>) {
+    pub fn push_block(&mut self, next: BasicBlock, phis: SmallVec<[PhiValue<'ctx>; 1]>) {
         self.control_stack.push(ControlFrame::Block {
             next,
             phis,
@@ -278,7 +278,12 @@ impl<'ctx> State<'ctx> {
         });
     }
 
-    pub fn push_loop(&mut self, body: BasicBlock, next: BasicBlock, phis: SmallVec<[PhiValue; 1]>) {
+    pub fn push_loop(
+        &mut self,
+        body: BasicBlock,
+        next: BasicBlock,
+        phis: SmallVec<[PhiValue<'ctx>; 1]>,
+    ) {
         self.control_stack.push(ControlFrame::Loop {
             body,
             next,
@@ -292,7 +297,7 @@ impl<'ctx> State<'ctx> {
         if_then: BasicBlock,
         if_else: BasicBlock,
         next: BasicBlock,
-        phis: SmallVec<[PhiValue; 1]>,
+        phis: SmallVec<[PhiValue<'ctx>; 1]>,
     ) {
         self.control_stack.push(ControlFrame::IfElse {
             if_then,

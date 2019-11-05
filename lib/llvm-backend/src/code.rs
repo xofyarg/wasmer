@@ -20,7 +20,6 @@ use inkwell::{
     AddressSpace, AtomicOrdering, AtomicRMWBinOp, FloatPredicate, IntPredicate, OptimizationLevel,
 };
 use smallvec::SmallVec;
-use std::marker::PhantomData;
 use std::{
     cell::RefCell,
     rc::Rc,
@@ -41,9 +40,9 @@ use wasmparser::{BinaryReaderError, MemoryImmediate, Operator, Type as WpType};
 
 fn func_sig_to_llvm<'ctx>(
     context: &'ctx Context,
-    intrinsics: &Intrinsics,
+    intrinsics: &'ctx Intrinsics,
     sig: &FuncSig,
-    type_to_llvm: fn(intrinsics: &Intrinsics, ty: Type) -> BasicTypeEnum<'ctx>,
+    type_to_llvm: fn(intrinsics: &'ctx Intrinsics, ty: Type) -> BasicTypeEnum<'ctx>,
 ) -> FunctionType<'ctx> {
     let user_param_types = sig.params().iter().map(|&ty| type_to_llvm(intrinsics, ty));
 
@@ -89,8 +88,8 @@ fn type_to_llvm_int_only<'ctx>(intrinsics: &'ctx Intrinsics, ty: Type) -> BasicT
 fn splat_vector<'ctx>(
     builder: &'ctx Builder,
     intrinsics: &'ctx Intrinsics,
-    value: BasicValueEnum,
-    vec_ty: VectorType,
+    value: BasicValueEnum<'ctx>,
+    vec_ty: VectorType<'ctx>,
     name: &str,
 ) -> VectorValue<'ctx> {
     // Use insert_element to insert the element into an undef vector, then use
@@ -107,8 +106,8 @@ fn splat_vector<'ctx>(
 // TODO: generalize to non-vectors using FloatMathType, IntMathType, etc. for
 // https://github.com/WebAssembly/nontrapping-float-to-int-conversions/blob/master/proposals/nontrapping-float-to-int-conversion/Overview.md
 fn trunc_sat<'ctx>(
-    builder: &Builder,
-    intrinsics: &Intrinsics,
+    builder: &'ctx Builder,
+    intrinsics: &'ctx Intrinsics,
     fvec_ty: VectorType<'ctx>,
     ivec_ty: VectorType<'ctx>,
     lower_bound: u64, // Exclusive (lowest representable value)
@@ -225,11 +224,11 @@ fn trunc_sat<'ctx>(
         .into_int_value()
 }
 
-fn trap_if_not_representable_as_int(
-    builder: &Builder,
-    intrinsics: &Intrinsics,
+fn trap_if_not_representable_as_int<'ctx>(
+    builder: &'ctx Builder,
+    intrinsics: &'ctx Intrinsics,
     context: &Context,
-    function: &FunctionValue,
+    function: &'ctx FunctionValue,
     lower_bound: u64, // Inclusive (not a trapping value)
     upper_bound: u64, // Inclusive (not a trapping value)
     value: FloatValue,
@@ -261,8 +260,8 @@ fn trap_if_not_representable_as_int(
         "out_of_bounds",
     );
 
-    let failure_block = context.append_basic_block(function, "conversion_failure_block");
-    let continue_block = context.append_basic_block(function, "conversion_success_block");
+    let failure_block = context.append_basic_block(*function, "conversion_failure_block");
+    let continue_block = context.append_basic_block(*function, "conversion_success_block");
 
     builder.build_conditional_branch(out_of_bounds, &failure_block, &continue_block);
     builder.position_at_end(&failure_block);
@@ -275,11 +274,11 @@ fn trap_if_not_representable_as_int(
     builder.position_at_end(&continue_block);
 }
 
-fn trap_if_zero_or_overflow(
-    builder: &Builder,
-    intrinsics: &Intrinsics,
+fn trap_if_zero_or_overflow<'ctx>(
+    builder: &'ctx Builder,
+    intrinsics: &'ctx Intrinsics,
     context: &Context,
-    function: &FunctionValue,
+    function: &'ctx FunctionValue,
     left: IntValue,
     right: IntValue,
 ) {
@@ -326,8 +325,8 @@ fn trap_if_zero_or_overflow(
         .unwrap()
         .into_int_value();
 
-    let shouldnt_trap_block = context.append_basic_block(function, "shouldnt_trap_block");
-    let should_trap_block = context.append_basic_block(function, "should_trap_block");
+    let shouldnt_trap_block = context.append_basic_block(*function, "shouldnt_trap_block");
+    let should_trap_block = context.append_basic_block(*function, "should_trap_block");
     builder.build_conditional_branch(should_trap, &should_trap_block, &shouldnt_trap_block);
     builder.position_at_end(&should_trap_block);
     builder.build_call(
@@ -339,11 +338,11 @@ fn trap_if_zero_or_overflow(
     builder.position_at_end(&shouldnt_trap_block);
 }
 
-fn trap_if_zero(
-    builder: &Builder,
-    intrinsics: &Intrinsics,
+fn trap_if_zero<'ctx>(
+    builder: &'ctx Builder,
+    intrinsics: &'ctx Intrinsics,
     context: &Context,
-    function: &FunctionValue,
+    function: &'ctx FunctionValue,
     value: IntValue,
 ) {
     let int_type = value.get_type();
@@ -368,8 +367,8 @@ fn trap_if_zero(
         .unwrap()
         .into_int_value();
 
-    let shouldnt_trap_block = context.append_basic_block(function, "shouldnt_trap_block");
-    let should_trap_block = context.append_basic_block(function, "should_trap_block");
+    let shouldnt_trap_block = context.append_basic_block(*function, "shouldnt_trap_block");
+    let should_trap_block = context.append_basic_block(*function, "should_trap_block");
     builder.build_conditional_branch(should_trap, &should_trap_block, &shouldnt_trap_block);
     builder.position_at_end(&should_trap_block);
     builder.build_call(
@@ -382,8 +381,8 @@ fn trap_if_zero(
 }
 
 fn v128_into_int_vec<'ctx>(
-    builder: &Builder,
-    intrinsics: &Intrinsics,
+    builder: &'ctx Builder,
+    intrinsics: &'ctx Intrinsics,
     value: BasicValueEnum<'ctx>,
     info: ExtraInfo,
     int_vec_ty: VectorType<'ctx>,
@@ -405,36 +404,36 @@ fn v128_into_int_vec<'ctx>(
 }
 
 fn v128_into_i8x16<'ctx>(
-    builder: &Builder,
-    intrinsics: &Intrinsics,
-    value: BasicValueEnum,
+    builder: &'ctx Builder,
+    intrinsics: &'ctx Intrinsics,
+    value: BasicValueEnum<'ctx>,
     info: ExtraInfo,
 ) -> VectorValue<'ctx> {
     v128_into_int_vec(builder, intrinsics, value, info, intrinsics.i8x16_ty)
 }
 
 fn v128_into_i16x8<'ctx>(
-    builder: &Builder,
-    intrinsics: &Intrinsics,
-    value: BasicValueEnum,
+    builder: &'ctx Builder,
+    intrinsics: &'ctx Intrinsics,
+    value: BasicValueEnum<'ctx>,
     info: ExtraInfo,
 ) -> VectorValue<'ctx> {
     v128_into_int_vec(builder, intrinsics, value, info, intrinsics.i16x8_ty)
 }
 
 fn v128_into_i32x4<'ctx>(
-    builder: &Builder,
-    intrinsics: &Intrinsics,
-    value: BasicValueEnum,
+    builder: &'ctx Builder,
+    intrinsics: &'ctx Intrinsics,
+    value: BasicValueEnum<'ctx>,
     info: ExtraInfo,
 ) -> VectorValue<'ctx> {
     v128_into_int_vec(builder, intrinsics, value, info, intrinsics.i32x4_ty)
 }
 
 fn v128_into_i64x2<'ctx>(
-    builder: &Builder,
-    intrinsics: &Intrinsics,
-    value: BasicValueEnum,
+    builder: &'ctx Builder,
+    intrinsics: &'ctx Intrinsics,
+    value: BasicValueEnum<'ctx>,
     info: ExtraInfo,
 ) -> VectorValue<'ctx> {
     v128_into_int_vec(builder, intrinsics, value, info, intrinsics.i64x2_ty)
@@ -443,9 +442,9 @@ fn v128_into_i64x2<'ctx>(
 // If the value is pending a 64-bit canonicalization, do it now.
 // Return a f32x4 vector.
 fn v128_into_f32x4<'ctx>(
-    builder: &Builder,
-    intrinsics: &Intrinsics,
-    value: BasicValueEnum,
+    builder: &'ctx Builder,
+    intrinsics: &'ctx Intrinsics,
+    value: BasicValueEnum<'ctx>,
     info: ExtraInfo,
 ) -> VectorValue<'ctx> {
     let value = if info == ExtraInfo::PendingF64NaN {
@@ -462,9 +461,9 @@ fn v128_into_f32x4<'ctx>(
 // If the value is pending a 32-bit canonicalization, do it now.
 // Return a f64x2 vector.
 fn v128_into_f64x2<'ctx>(
-    builder: &Builder,
-    intrinsics: &Intrinsics,
-    value: BasicValueEnum,
+    builder: &'ctx Builder,
+    intrinsics: &'ctx Intrinsics,
+    value: BasicValueEnum<'ctx>,
     info: ExtraInfo,
 ) -> VectorValue<'ctx> {
     let value = if info == ExtraInfo::PendingF32NaN {
@@ -479,9 +478,9 @@ fn v128_into_f64x2<'ctx>(
 }
 
 fn apply_pending_canonicalization<'ctx>(
-    builder: &Builder,
-    intrinsics: &Intrinsics,
-    value: BasicValueEnum,
+    builder: &'ctx Builder,
+    intrinsics: &'ctx Intrinsics,
+    value: BasicValueEnum<'ctx>,
     info: ExtraInfo,
 ) -> BasicValueEnum<'ctx> {
     match info {
@@ -515,9 +514,9 @@ fn apply_pending_canonicalization<'ctx>(
 
 // Replaces any NaN with the canonical QNaN, otherwise leaves the value alone.
 fn canonicalize_nans<'ctx>(
-    builder: &Builder,
-    intrinsics: &Intrinsics,
-    value: BasicValueEnum,
+    builder: &'ctx Builder,
+    intrinsics: &'ctx Intrinsics,
+    value: BasicValueEnum<'ctx>,
 ) -> BasicValueEnum<'ctx> {
     let f_ty = value.get_type();
     let canonicalized = if f_ty.is_vector_type() {
@@ -553,11 +552,11 @@ fn canonicalize_nans<'ctx>(
 }
 
 fn resolve_memory_ptr<'ctx>(
-    builder: &Builder,
-    intrinsics: &Intrinsics,
+    builder: &'ctx Builder,
+    intrinsics: &'ctx Intrinsics,
     context: &'ctx Context,
     module: Rc<RefCell<Module>>,
-    function: &FunctionValue,
+    function: &'ctx FunctionValue,
     state: &mut State,
     ctx: &mut CtxType,
     memarg: &MemoryImmediate,
@@ -663,8 +662,8 @@ fn resolve_memory_ptr<'ctx>(
                 .into_int_value();
 
             let in_bounds_continue_block =
-                context.append_basic_block(function, "in_bounds_continue_block");
-            let not_in_bounds_block = context.append_basic_block(function, "not_in_bounds_block");
+                context.append_basic_block(*function, "in_bounds_continue_block");
+            let not_in_bounds_block = context.append_basic_block(*function, "not_in_bounds_block");
             builder.build_conditional_branch(
                 ptr_in_bounds,
                 &in_bounds_continue_block,
@@ -687,10 +686,10 @@ fn resolve_memory_ptr<'ctx>(
         .into_pointer_value())
 }
 
-fn emit_stack_map(
+fn emit_stack_map<'ctx>(
     _module_info: &ModuleInfo,
-    intrinsics: &Intrinsics,
-    builder: &Builder,
+    intrinsics: &'ctx Intrinsics,
+    builder: &'ctx Builder,
     local_function_id: usize,
     target: &mut StackmapRegistry,
     kind: StackmapEntryKind,
@@ -740,9 +739,9 @@ fn emit_stack_map(
     });
 }
 
-fn finalize_opcode_stack_map(
-    intrinsics: &Intrinsics,
-    builder: &Builder,
+fn finalize_opcode_stack_map<'ctx>(
+    intrinsics: &'ctx Intrinsics,
+    builder: &'ctx Builder,
     local_function_id: usize,
     target: &mut StackmapRegistry,
     kind: StackmapEntryKind,
@@ -771,13 +770,13 @@ fn finalize_opcode_stack_map(
     });
 }
 
-fn trap_if_misaligned(
-    builder: &Builder,
-    intrinsics: &Intrinsics,
+fn trap_if_misaligned<'ctx>(
+    builder: &'ctx Builder,
+    intrinsics: &'ctx Intrinsics,
     context: &Context,
-    function: &FunctionValue,
+    function: &'ctx FunctionValue,
     memarg: &MemoryImmediate,
-    ptr: PointerValue,
+    ptr: PointerValue<'ctx>,
 ) {
     let align = match memarg.flags & 3 {
         0 => {
@@ -809,8 +808,8 @@ fn trap_if_misaligned(
         .unwrap()
         .into_int_value();
 
-    let continue_block = context.append_basic_block(function, "aligned_access_continue_block");
-    let not_aligned_block = context.append_basic_block(function, "misaligned_trap_block");
+    let continue_block = context.append_basic_block(*function, "aligned_access_continue_block");
+    let not_aligned_block = context.append_basic_block(*function, "misaligned_trap_block");
     builder.build_conditional_branch(aligned, &continue_block, &not_aligned_block);
 
     builder.position_at_end(&not_aligned_block);
@@ -846,8 +845,6 @@ pub unsafe extern "C" fn callback_trampoline(
 
 pub struct LLVMModuleCodeGenerator<'ctx> {
     context: Option<Context>,
-    _phantom: PhantomData<&'ctx ()>,
-
     builder: Option<Builder<'ctx>>,
     intrinsics: Option<Intrinsics<'ctx>>,
     functions: Vec<LLVMFunctionCodeGenerator<'ctx>>,
@@ -864,8 +861,6 @@ pub struct LLVMModuleCodeGenerator<'ctx> {
 
 pub struct LLVMFunctionCodeGenerator<'ctx> {
     context: Option<Context>,
-    _phantom: PhantomData<&'ctx ()>,
-
     builder: Option<Builder<'ctx>>,
     alloca_builder: Option<Builder<'ctx>>,
     intrinsics: Option<Intrinsics<'ctx>>,
@@ -935,7 +930,7 @@ impl<'ctx> FunctionCodeGenerator<CodegenError> for LLVMFunctionCodeGenerator<'ct
             .context
             .as_ref()
             .unwrap()
-            .append_basic_block(&self.function, "start_of_code");
+            .append_basic_block(self.function, "start_of_code");
         let entry_end_inst = self
             .builder
             .as_ref()
@@ -951,7 +946,7 @@ impl<'ctx> FunctionCodeGenerator<CodegenError> for LLVMFunctionCodeGenerator<'ct
         let module_info =
             unsafe { ::std::mem::transmute::<&ModuleInfo, &'static ModuleInfo>(module_info) };
         let function = unsafe {
-            ::std::mem::transmute::<&FunctionValue, &'static FunctionValue>(&self.function)
+            ::std::mem::transmute::<&'ctx FunctionValue, &'static FunctionValue>(&self.function)
         };
         let ctx = CtxType::new(module_info, function, cache_builder);
 
@@ -1095,7 +1090,7 @@ impl<'ctx> FunctionCodeGenerator<CodegenError> for LLVMFunctionCodeGenerator<'ct
                     offset: -1isize as usize,
                 })?;
 
-                let end_block = context.append_basic_block(&function, "end");
+                let end_block = context.append_basic_block(function, "end");
                 builder.position_at_end(&end_block);
 
                 let phis = if let Ok(wasmer_ty) = blocktype_to_type(ty) {
@@ -1112,8 +1107,8 @@ impl<'ctx> FunctionCodeGenerator<CodegenError> for LLVMFunctionCodeGenerator<'ct
                 builder.position_at_end(&current_block);
             }
             Operator::Loop { ty } => {
-                let loop_body = context.append_basic_block(&function, "loop_body");
-                let loop_next = context.append_basic_block(&function, "loop_outer");
+                let loop_body = context.append_basic_block(function, "loop_body");
+                let loop_next = context.append_basic_block(function, "loop_outer");
 
                 builder.build_unconditional_branch(&loop_body);
 
@@ -1218,7 +1213,7 @@ impl<'ctx> FunctionCodeGenerator<CodegenError> for LLVMFunctionCodeGenerator<'ct
                     phi.add_incoming(&[(&value, &current_block)]);
                 }
 
-                let else_block = context.append_basic_block(&function, "else");
+                let else_block = context.append_basic_block(function, "else");
 
                 let cond_value = builder.build_int_compare(
                     IntPredicate::NE,
@@ -1284,9 +1279,9 @@ impl<'ctx> FunctionCodeGenerator<CodegenError> for LLVMFunctionCodeGenerator<'ct
                     message: "not currently in a block",
                     offset: -1isize as usize,
                 })?;
-                let if_then_block = context.append_basic_block(&function, "if_then");
-                let if_else_block = context.append_basic_block(&function, "if_else");
-                let end_block = context.append_basic_block(&function, "if_end");
+                let if_then_block = context.append_basic_block(function, "if_then");
+                let if_else_block = context.append_basic_block(function, "if_else");
+                let end_block = context.append_basic_block(function, "if_end");
 
                 let end_phis = {
                     builder.position_at_end(&end_block);
@@ -1916,9 +1911,9 @@ impl<'ctx> FunctionCodeGenerator<CodegenError> for LLVMFunctionCodeGenerator<'ct
                     .into_int_value();
 
                 let in_bounds_continue_block =
-                    context.append_basic_block(&function, "in_bounds_continue_block");
+                    context.append_basic_block(function, "in_bounds_continue_block");
                 let not_in_bounds_block =
-                    context.append_basic_block(&function, "not_in_bounds_block");
+                    context.append_basic_block(function, "not_in_bounds_block");
                 builder.build_conditional_branch(
                     index_in_bounds,
                     &in_bounds_continue_block,
@@ -1957,9 +1952,9 @@ impl<'ctx> FunctionCodeGenerator<CodegenError> for LLVMFunctionCodeGenerator<'ct
                     .unwrap()
                     .into_int_value();
 
-                let continue_block = context.append_basic_block(&function, "continue_block");
+                let continue_block = context.append_basic_block(function, "continue_block");
                 let sigindices_notequal_block =
-                    context.append_basic_block(&function, "sigindices_notequal_block");
+                    context.append_basic_block(function, "sigindices_notequal_block");
                 builder.build_conditional_branch(
                     sigindices_equal,
                     &continue_block,
@@ -8070,11 +8065,11 @@ impl<'ctx> ModuleCodeGenerator<LLVMFunctionCodeGenerator<'ctx>, LLVMBackend, Cod
         function.set_personality_function(self.personality_func);
 
         let mut state = State::new();
-        let entry_block = context.append_basic_block(&function, "entry");
+        let entry_block = context.append_basic_block(function, "entry");
         let alloca_builder = context.create_builder();
         alloca_builder.position_at_end(&entry_block);
 
-        let return_block = context.append_basic_block(&function, "return");
+        let return_block = context.append_basic_block(function, "return");
         builder.position_at_end(&return_block);
 
         let phis: SmallVec<[PhiValue; 1]> = func_sig

@@ -14,7 +14,6 @@ use inkwell::{
 };
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::marker::PhantomData;
 use std::rc::Rc;
 use wasmer_runtime_core::{
     memory::MemoryType,
@@ -28,7 +27,7 @@ use wasmer_runtime_core::{
     vm::{Ctx, INTERNALS_SIZE},
 };
 
-fn type_to_llvm_ptr<'ctx>(intrinsics: &Intrinsics<'ctx>, ty: Type) -> PointerType<'ctx> {
+fn type_to_llvm_ptr<'ctx>(intrinsics: &'ctx Intrinsics, ty: Type) -> PointerType<'ctx> {
     match ty {
         Type::I32 => intrinsics.i32_ptr_ty,
         Type::I64 => intrinsics.i64_ptr_ty,
@@ -154,8 +153,8 @@ pub struct Intrinsics<'ctx> {
     pub ctx_ptr_ty: PointerType<'ctx>,
 }
 
-impl Intrinsics<'_> {
-    pub fn declare(module: &Module, context: &Context) -> Self {
+impl<'ctx> Intrinsics<'ctx> {
+    pub fn declare(module: &Module<'ctx>, context: &'ctx Context) -> Self {
         let void_ty = context.void_type();
         let i1_ty = context.bool_type();
         let i8_ty = context.i8_type();
@@ -604,7 +603,6 @@ pub struct CtxType<'ctx> {
     cached_sigindices: HashMap<SigIndex, IntValue<'ctx>>,
     cached_globals: HashMap<GlobalIndex, GlobalCache<'ctx>>,
     cached_imported_functions: HashMap<ImportedFuncIndex, ImportedFuncCache<'ctx>>,
-    //    _phantom: PhantomData<&'a FunctionValue<'ctx>>,
 }
 
 fn offset_to_index(offset: u8) -> u32 {
@@ -630,8 +628,6 @@ impl<'ctx> CtxType<'ctx> {
             cached_sigindices: HashMap::new(),
             cached_globals: HashMap::new(),
             cached_imported_functions: HashMap::new(),
-
-            _phantom: PhantomData,
         }
     }
 
@@ -663,7 +659,7 @@ impl<'ctx> CtxType<'ctx> {
     pub fn memory(
         &mut self,
         index: MemoryIndex,
-        intrinsics: &Intrinsics,
+        intrinsics: &'ctx Intrinsics,
         module: Rc<RefCell<Module>>,
     ) -> MemoryCache {
         let (cached_memories, info, ctx_ptr_value, cache_builder) = (
@@ -784,9 +780,9 @@ impl<'ctx> CtxType<'ctx> {
     pub fn table_prepare(
         &mut self,
         index: TableIndex,
-        intrinsics: &Intrinsics,
+        intrinsics: &'ctx Intrinsics,
         module: Rc<RefCell<Module>>,
-    ) -> (PointerValue, PointerValue) {
+    ) -> (PointerValue<'ctx>, PointerValue<'ctx>) {
         let (cached_tables, info, ctx_ptr_value, cache_builder) = (
             &mut self.cached_tables,
             self.info,
@@ -867,10 +863,10 @@ impl<'ctx> CtxType<'ctx> {
     pub fn table(
         &mut self,
         index: TableIndex,
-        intrinsics: &Intrinsics,
+        intrinsics: &'ctx Intrinsics,
         module: Rc<RefCell<Module>>,
-        builder: &Builder,
-    ) -> (PointerValue, IntValue) {
+        builder: &'ctx Builder,
+    ) -> (PointerValue<'ctx>, IntValue<'ctx>) {
         let (ptr_to_base_ptr, ptr_to_bounds) =
             self.table_prepare(index, intrinsics, module.clone());
         let base_ptr = builder
@@ -897,11 +893,11 @@ impl<'ctx> CtxType<'ctx> {
     pub fn local_func(
         &mut self,
         index: LocalFuncIndex,
-        fn_ty: FunctionType,
-        intrinsics: &Intrinsics,
+        fn_ty: FunctionType<'ctx>,
+        intrinsics: &'ctx Intrinsics,
         module: Rc<RefCell<Module>>,
-        builder: &Builder,
-    ) -> PointerValue {
+        builder: &'ctx Builder,
+    ) -> PointerValue<'ctx> {
         let local_func_array_ptr_ptr = unsafe {
             builder.build_struct_gep(
                 self.ctx_ptr_value,
@@ -943,7 +939,11 @@ impl<'ctx> CtxType<'ctx> {
         )
     }
 
-    pub fn dynamic_sigindex(&mut self, index: SigIndex, intrinsics: &Intrinsics) -> IntValue {
+    pub fn dynamic_sigindex(
+        &mut self,
+        index: SigIndex,
+        intrinsics: &'ctx Intrinsics,
+    ) -> IntValue<'ctx> {
         let (cached_sigindices, ctx_ptr_value, cache_builder) = (
             &mut self.cached_sigindices,
             self.ctx_ptr_value,
@@ -980,7 +980,7 @@ impl<'ctx> CtxType<'ctx> {
     pub fn global_cache(
         &mut self,
         index: GlobalIndex,
-        intrinsics: &Intrinsics,
+        intrinsics: &'ctx Intrinsics,
         module: Rc<RefCell<Module>>,
     ) -> GlobalCache {
         let (cached_globals, ctx_ptr_value, info, cache_builder) = (
@@ -1082,9 +1082,9 @@ impl<'ctx> CtxType<'ctx> {
     pub fn imported_func(
         &mut self,
         index: ImportedFuncIndex,
-        intrinsics: &Intrinsics,
+        intrinsics: &'ctx Intrinsics,
         module: Rc<RefCell<Module>>,
-    ) -> (PointerValue, PointerValue) {
+    ) -> (PointerValue<'ctx>, PointerValue<'ctx>) {
         let (cached_imported_functions, ctx_ptr_value, cache_builder) = (
             &mut self.cached_imported_functions,
             self.ctx_ptr_value,
@@ -1154,10 +1154,10 @@ impl<'ctx> CtxType<'ctx> {
     pub fn internal_field(
         &mut self,
         index: usize,
-        intrinsics: &Intrinsics,
+        intrinsics: &'ctx Intrinsics,
         module: Rc<RefCell<Module>>,
-        builder: &Builder,
-    ) -> PointerValue {
+        builder: &'ctx Builder,
+    ) -> PointerValue<'ctx> {
         assert!(index < INTERNALS_SIZE);
 
         let local_internals_ptr_ptr = unsafe {
@@ -1189,9 +1189,9 @@ impl<'ctx> CtxType<'ctx> {
 
 // Given an instruction that operates on memory, mark the access as not aliasing
 // other memory accesses which have a different (label, index) pair.
-pub fn tbaa_label(
+pub fn tbaa_label<'ctx>(
     module: Rc<RefCell<Module>>,
-    intrinsics: &Intrinsics,
+    intrinsics: &'ctx Intrinsics,
     label: &str,
     instruction: InstructionValue,
     index: Option<u32>,
