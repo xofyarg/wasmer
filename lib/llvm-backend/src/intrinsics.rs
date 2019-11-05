@@ -612,7 +612,7 @@ fn offset_to_index(offset: u8) -> u32 {
 impl<'ctx> CtxType<'ctx> {
     pub fn new(
         info: &'ctx ModuleInfo,
-        func_value: &'ctx FunctionValue,
+        func_value: &FunctionValue<'ctx>,
         cache_builder: Builder<'ctx>,
     ) -> CtxType<'ctx> {
         CtxType {

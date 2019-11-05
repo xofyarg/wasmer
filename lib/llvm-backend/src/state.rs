@@ -106,7 +106,7 @@ impl<'ctx> State<'ctx> {
         }
     }
 
-    pub fn reset_stack(&mut self, frame: &'ctx ControlFrame) {
+    pub fn reset_stack(&mut self, frame: &ControlFrame<'ctx>) {
         let stack_size_snapshot = match frame {
             ControlFrame::Block {
                 stack_size_snapshot,
@@ -124,14 +124,14 @@ impl<'ctx> State<'ctx> {
         self.stack.truncate(stack_size_snapshot);
     }
 
-    pub fn outermost_frame(&self) -> Result<&'ctx ControlFrame, BinaryReaderError> {
+    pub fn outermost_frame(&self) -> Result<&ControlFrame<'ctx>, BinaryReaderError> {
         self.control_stack.get(0).ok_or(BinaryReaderError {
             message: "invalid control stack depth",
             offset: -1isize as usize,
         })
     }
 
-    pub fn frame_at_depth(&self, depth: u32) -> Result<&'ctx ControlFrame, BinaryReaderError> {
+    pub fn frame_at_depth(&self, depth: u32) -> Result<&ControlFrame<'ctx>, BinaryReaderError> {
         let index = self.control_stack.len() - 1 - (depth as usize);
         self.control_stack.get(index).ok_or(BinaryReaderError {
             message: "invalid control stack depth",
@@ -142,7 +142,7 @@ impl<'ctx> State<'ctx> {
     pub fn frame_at_depth_mut(
         &mut self,
         depth: u32,
-    ) -> Result<&'ctx mut ControlFrame, BinaryReaderError> {
+    ) -> Result<&mut ControlFrame<'ctx>, BinaryReaderError> {
         let index = self.control_stack.len() - 1 - (depth as usize);
         self.control_stack.get_mut(index).ok_or(BinaryReaderError {
             message: "invalid control stack depth",

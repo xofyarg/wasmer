@@ -40,9 +40,9 @@ use wasmparser::{BinaryReaderError, MemoryImmediate, Operator, Type as WpType};
 
 fn func_sig_to_llvm<'ctx>(
     context: &'ctx Context,
-    intrinsics: &'ctx Intrinsics,
+    intrinsics: &Intrinsics<'ctx>,
     sig: &FuncSig,
-    type_to_llvm: fn(intrinsics: &'ctx Intrinsics, ty: Type) -> BasicTypeEnum<'ctx>,
+    type_to_llvm: fn(intrinsics: &Intrinsics<'ctx>, ty: Type) -> BasicTypeEnum<'ctx>,
 ) -> FunctionType<'ctx> {
     let user_param_types = sig.params().iter().map(|&ty| type_to_llvm(intrinsics, ty));
 
@@ -66,7 +66,7 @@ fn func_sig_to_llvm<'ctx>(
     }
 }
 
-fn type_to_llvm<'ctx>(intrinsics: &'ctx Intrinsics, ty: Type) -> BasicTypeEnum<'ctx> {
+fn type_to_llvm<'ctx>(intrinsics: &Intrinsics<'ctx>, ty: Type) -> BasicTypeEnum<'ctx> {
     match ty {
         Type::I32 => intrinsics.i32_ty.as_basic_type_enum(),
         Type::I64 => intrinsics.i64_ty.as_basic_type_enum(),
@@ -76,7 +76,7 @@ fn type_to_llvm<'ctx>(intrinsics: &'ctx Intrinsics, ty: Type) -> BasicTypeEnum<'
     }
 }
 
-fn type_to_llvm_int_only<'ctx>(intrinsics: &'ctx Intrinsics, ty: Type) -> BasicTypeEnum<'ctx> {
+fn type_to_llvm_int_only<'ctx>(intrinsics: &Intrinsics<'ctx>, ty: Type) -> BasicTypeEnum<'ctx> {
     match ty {
         Type::I32 | Type::F32 => intrinsics.i32_ty.as_basic_type_enum(),
         Type::I64 | Type::F64 => intrinsics.i64_ty.as_basic_type_enum(),
@@ -552,13 +552,13 @@ fn canonicalize_nans<'ctx>(
 }
 
 fn resolve_memory_ptr<'ctx>(
-    builder: &'ctx Builder,
-    intrinsics: &'ctx Intrinsics,
+    builder: &Builder<'ctx>,
+    intrinsics: &Intrinsics<'ctx>,
     context: &'ctx Context,
     module: Rc<RefCell<Module>>,
-    function: &'ctx FunctionValue,
-    state: &mut State,
-    ctx: &mut CtxType,
+    function: &FunctionValue<'ctx>,
+    state: &mut State<'ctx>,
+    ctx: &mut CtxType<'ctx>,
     memarg: &MemoryImmediate,
     ptr_ty: PointerType,
     value_size: usize,
@@ -688,14 +688,14 @@ fn resolve_memory_ptr<'ctx>(
 
 fn emit_stack_map<'ctx>(
     _module_info: &ModuleInfo,
-    intrinsics: &'ctx Intrinsics,
-    builder: &'ctx Builder,
+    intrinsics: &Intrinsics<'ctx>,
+    builder: &Builder<'ctx>,
     local_function_id: usize,
     target: &mut StackmapRegistry,
     kind: StackmapEntryKind,
     locals: &[PointerValue],
-    state: &State,
-    _ctx: &mut CtxType,
+    state: &State<'ctx>,
+    _ctx: &mut CtxType<'ctx>,
     opcode_offset: usize,
 ) {
     let stackmap_id = target.entries.len();
@@ -893,16 +893,21 @@ impl<'ctx> FunctionCodeGenerator<CodegenError> for LLVMFunctionCodeGenerator<'ct
 
         let wasmer_ty = type_to_type(ty)?;
 
-        let intrinsics = self.intrinsics.as_ref().unwrap();
-        let ty = type_to_llvm(intrinsics, wasmer_ty);
+        let ty = self
+            .intrinsics
+            .map(|ref i| type_to_llvm(i, wasmer_ty))
+            .unwrap();
 
-        let default_value = match wasmer_ty {
-            Type::I32 => intrinsics.i32_zero.as_basic_value_enum(),
-            Type::I64 => intrinsics.i64_zero.as_basic_value_enum(),
-            Type::F32 => intrinsics.f32_zero.as_basic_value_enum(),
-            Type::F64 => intrinsics.f64_zero.as_basic_value_enum(),
-            Type::V128 => intrinsics.i128_zero.as_basic_value_enum(),
-        };
+        let default_value = self
+            .intrinsics
+            .map(|ref i| match wasmer_ty {
+                Type::I32 => i.i32_zero.as_basic_value_enum(),
+                Type::I64 => i.i64_zero.as_basic_value_enum(),
+                Type::F32 => i.f32_zero.as_basic_value_enum(),
+                Type::F64 => i.f64_zero.as_basic_value_enum(),
+                Type::V128 => i.i128_zero.as_basic_value_enum(),
+            })
+            .unwrap();
 
         let builder = self.builder.as_ref().unwrap();
         let alloca_builder = self.alloca_builder.as_ref().unwrap();
@@ -941,14 +946,14 @@ impl<'ctx> FunctionCodeGenerator<CodegenError> for LLVMFunctionCodeGenerator<'ct
             .unwrap()
             .position_at_end(&start_of_code_block);
 
-        let cache_builder = self.context.as_ref().unwrap().create_builder();
+        let cache_builder = self.context.map(|ref i| i.create_builder()).unwrap();
         cache_builder.position_before(&entry_end_inst);
         let module_info =
             unsafe { ::std::mem::transmute::<&ModuleInfo, &'static ModuleInfo>(module_info) };
-        let function = unsafe {
+        /*let function = unsafe {
             ::std::mem::transmute::<&'ctx FunctionValue, &'static FunctionValue>(&self.function)
-        };
-        let ctx = CtxType::new(module_info, function, cache_builder);
+        };*/
+        let ctx = CtxType::new(module_info, &self.function, cache_builder);
 
         self.ctx = Some(ctx);
 
@@ -8038,7 +8043,7 @@ impl<'ctx> ModuleCodeGenerator<LLVMFunctionCodeGenerator<'ctx>, LLVMBackend, Cod
     fn next_function(
         &mut self,
         _module_info: Arc<RwLock<ModuleInfo>>,
-    ) -> Result<&mut LLVMFunctionCodeGenerator, CodegenError> {
+    ) -> Result<&mut LLVMFunctionCodeGenerator<'ctx>, CodegenError> {
         // Creates a new function and returns the function-scope code generator for it.
         let (context, builder, intrinsics) = match self.functions.last_mut() {
             Some(x) => (
@@ -8064,7 +8069,7 @@ impl<'ctx> ModuleCodeGenerator<LLVMFunctionCodeGenerator<'ctx>, LLVMBackend, Cod
         );
         function.set_personality_function(self.personality_func);
 
-        let mut state = State::new();
+        let mut state: State<'ctx> = State::new();
         let entry_block = context.append_basic_block(function, "entry");
         let alloca_builder = context.create_builder();
         alloca_builder.position_at_end(&entry_block);
@@ -8217,12 +8222,16 @@ impl<'ctx> ModuleCodeGenerator<LLVMFunctionCodeGenerator<'ctx>, LLVMBackend, Cod
         self.signatures = signatures
             .iter()
             .map(|(_, sig)| {
-                func_sig_to_llvm(
-                    self.context.as_ref().unwrap(),
-                    self.intrinsics.as_ref().unwrap(),
-                    sig,
-                    type_to_llvm_int_only,
-                )
+                self.context
+                    .map(|ref context| {
+                        func_sig_to_llvm(
+                            context,
+                            self.intrinsics.as_ref().unwrap(),
+                            sig,
+                            type_to_llvm_int_only,
+                        )
+                    })
+                    .unwrap()
             })
             .collect();
         self.signatures_raw = signatures.clone();
