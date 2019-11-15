@@ -183,11 +183,30 @@ impl LLVMBackend {
         });
         let triple = TargetMachine::get_default_triple().to_string();
         let target = Target::from_triple(&triple).unwrap();
+
+        // override cpu and features
+        let mut cpu = TargetMachine::get_host_cpu_name().to_string();
+        let cpu_override = std::env::var("_llvm_target_cpu").unwrap_or(cpu.clone());
+        if cpu != cpu_override {
+            eprintln!("override cpu from: {}\nto: {}", cpu, cpu_override);
+            cpu = cpu_override;
+        }
+
+        let mut features = TargetMachine::get_host_cpu_features().to_string();
+        let features_override = std::env::var("_llvm_target_features").unwrap_or(features.clone());
+        if features != features_override {
+            eprintln!(
+                "override features from: {}\nto: {}",
+                features, features_override
+            );
+            features = features_override.to_string();
+        }
+
         let target_machine = target
             .create_target_machine(
                 &triple,
-                &TargetMachine::get_host_cpu_name().to_string(),
-                &TargetMachine::get_host_cpu_features().to_string(),
+                &cpu,
+                &features,
                 OptimizationLevel::Aggressive,
                 RelocMode::Static,
                 CodeModel::Large,
